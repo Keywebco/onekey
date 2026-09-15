@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>OneKey — Deterministic Password Generator</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;--surface:#13131e;--border:#2a2a40;
+  --text:#e0e0e0;--muted:#888;--cyan:#00d4ff;--cyan-d:#007a99;
+  --red:#ff4d6a;--green:#00e676;
+  --font:'Segoe UI','Helvetica Neue',Arial,sans-serif
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:18px;line-height:1.6;min-height:100vh}
+body{display:flex;flex-direction:column;align-items:center;padding:2rem 1rem 4rem}
+.card{width:100%;max-width:560px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2.5rem 2rem}
+h1{font-size:2rem;font-weight:700;color:var(--cyan);letter-spacing:.04em;text-align:center;margin-bottom:.25rem}
+.tagline{text-align:center;color:var(--muted);font-size:.95rem;margin-bottom:2.5rem}
+.field{margin-bottom:1.5rem}
+label{display:block;font-size:.9rem;font-weight:600;color:var(--cyan);margin-bottom:.4rem;letter-spacing:.03em;text-transform:uppercase}
+.input-wrap{position:relative;display:flex}
+input[type=password],input[type=text],input[type=number]{
+  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-family:var(--font);font-size:1.1rem;padding:.75rem 1rem;outline:none;transition:border-color .2s
+}
+input:focus{border-color:var(--cyan)}
+input[type=number]{-moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{opacity:1;filter:invert(1)}
+.tog{position:absolute;right:0;top:0;height:100%;padding:0 1rem;background:transparent;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;transition:color .2s}
+.tog:hover{color:var(--cyan)}
+#masterInput{padding-right:3rem}
+#genBtn{width:100%;padding:.9rem;margin-top:.5rem;background:var(--cyan);color:#000;font-family:var(--font);font-size:1.1rem;font-weight:700;border:none;border-radius:8px;cursor:pointer;letter-spacing:.05em;text-transform:uppercase;transition:background .2s,opacity .2s}
+#genBtn:hover{background:#33ddff}
+#genBtn:active{background:var(--cyan-d)}
+#genBtn:disabled{opacity:.4;cursor:not-allowed}
+.out{margin-top:2rem;display:none}
+.out.on{display:block}
+#pwOut{width:100%;background:var(--bg);border:1.5px solid var(--cyan);border-radius:8px;color:var(--green);font-family:'Courier New',Courier,monospace;font-size:1.5rem;font-weight:700;letter-spacing:.1em;padding:.75rem 1rem;text-align:center}
+#pwOut:focus{outline:2px solid var(--cyan)}
+#cpyBtn{width:100%;margin-top:.75rem;padding:.75rem;background:transparent;color:var(--cyan);font-family:var(--font);font-size:1rem;font-weight:600;border:1.5px solid var(--cyan);border-radius:8px;cursor:pointer;letter-spacing:.04em;text-transform:uppercase;transition:background .2s,color .2s}
+#cpyBtn:hover{background:var(--cyan);color:#000}
+#cpySt{text-align:center;font-size:.85rem;margin-top:.4rem;height:1.2em;color:var(--green)}
+#errBan{display:none;margin-top:1.25rem;padding:.75rem 1rem;background:#2a0a10;border:1px solid var(--red);border-radius:8px;color:var(--red);font-size:.95rem}
+#errBan.on{display:block}
+.hiw{margin-top:3rem;padding:1.5rem;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:.9rem;line-height:1.8}
+.hiw h2{font-size:1rem;color:var(--text);margin-bottom:.75rem;letter-spacing:.05em;text-transform:uppercase}
+#fatal{display:none;text-align:center;padding:2rem;color:var(--red);font-size:1.1rem}
+#fatal.on{display:block}
+#mainUI.hidden{display:none}
+</style>
+</head>
+<body>
+
+<div id="fatal" role="alert" aria-live="assertive">
+  Your browser does not support Web Crypto. Please use a modern browser.
+</div>
+
+<div id="mainUI" class="card" role="main">
+  <h1>🔑 OneKey</h1>
+  <p class="tagline">Deterministic passwords. No storage. Pure math.</p>
+
+  <div class="field">
+    <label for="masterInput">Master Secret</label>
+    <div class="input-wrap">
+      <input id="masterInput" type="password" placeholder="Your master secret phrase"
+             autocomplete="new-password" spellcheck="false"/>
+      <button class="tog" id="togBtn" type="button" aria-label="Show or hide master secret" title="Show/Hide">
+        <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="22" height="22"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+          <line id="eyeLine" x1="2" y1="2" x2="22" y2="22" style="display:none"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="siteInput">Site Name</label>
+    <input id="siteInput" type="text" placeholder="e.g. github.com" autocomplete="off" spellcheck="false"/>
+  </div>
+
+  <div class="field">
+    <label for="ctrInput">Counter</label>
+    <input id="ctrInput" type="number" value="1" min="1" step="1"/>
+  </div>
+
+  <button id="genBtn" type="button">Generate Password</button>
+
+  <div id="errBan" role="alert" aria-live="polite"></div>
+
+  <div id="outSec" class="out" aria-live="polite">
+    <label for="pwOut" style="margin-top:1.5rem;display:block">Generated Password</label>
+    <input id="pwOut" type="text" readonly aria-label="Generated password"/>
+    <button id="cpyBtn" type="button">Copy to Clipboard</button>
+    <div id="cpySt" aria-live="polite" aria-atomic="true"></div>
+  </div>
+
+  <div class="hiw" role="note">
+    <h2>How It Works</h2>
+    <p>OneKey never stores your passwords. It derives them mathematically from your
+    <strong>master secret</strong> + the <strong>site name</strong> + a <strong>counter</strong>.
+    Same inputs always give the same password. No server. No account. No vault. Just math.</p>
+    <p style="margin-top:.75rem">Technically: PBKDF2-HMAC-SHA-256, 200,000 iterations,
+    salt = <code>"sitename:counter"</code>. The 32-byte output is base64-encoded and trimmed
+    to 20 characters, with complexity substitutions if needed.</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ── Web Crypto availability check ────────────────────────────────
+if(!window.crypto||!window.crypto.subtle){
+  document.getElementById('fatal').classList.add('on');
+  document.getElementById('mainUI').classList.add('hidden');
+}
+
+// ── DOM refs ─────────────────────────────────────────────────────
+const masterInput=document.getElementById('masterInput');
+const togBtn=document.getElementById('togBtn');
+const eyeLine=document.getElementById('eyeLine');
+const siteInput=document.getElementById('siteInput');
+const ctrInput=document.getElementById('ctrInput');
+const genBtn=document.getElementById('genBtn');
+const outSec=document.getElementById('outSec');
+const pwOut=document.getElementById('pwOut');
+const cpyBtn=document.getElementById('cpyBtn');
+const cpySt=document.getElementById('cpySt');
+const errBan=document.getElementById('errBan');
+
+// ── Show/hide master secret ───────────────────────────────────────
+togBtn.addEventListener('click',()=>{
+  const hidden=masterInput.type==='password';
+  masterInput.type=hidden?'text':'password';
+  eyeLine.style.display=hidden?'inline':'none';
+  togBtn.setAttribute('aria-label',hidden?'Hide master secret':'Show master secret');
+});
+
+// ── Utility: UTF-8 encode ────────────────────────────────────────
+const enc=new TextEncoder();
+const utf8=s=>enc.encode(s);
+
+// ── Utility: ArrayBuffer → base64 ───────────────────────────────
+function toB64(buf){
+  let b='';
+  new Uint8Array(buf).forEach(x=>b+=String.fromCharCode(x));
+  return btoa(b);
+}
+
+/**
+ * Enforce password complexity — deterministic substitutions at fixed positions.
+ * Positions: 0=uppercase, 1=lowercase, 2=digit("4"), 3=symbol("!")
+ */
+function ensureComplexity(s){
+  const a=s.split('');
+  if(!/[A-Z]/.test(s)) a[0]=a[0].toUpperCase()||'A';
+  if(!/[a-z]/.test(s)) a[1]=a[1].toLowerCase()||'a';
+  if(!/[0-9]/.test(s)) a[2]='4';
+  if(!/[^A-Za-z0-9]/.test(s)) a[3]='!';
+  return a.join('');
+}
+
+/**
+ * Core: derive a 20-char password via PBKDF2-HMAC-SHA-256.
+ * Key material: masterSecret
+ * Salt: UTF-8("siteName:counter")
+ * Iterations: 200,000 | Output: 32 bytes
+ */
+async function derivePassword(master,site,counter){
+  // Import raw key material
+  const km=await crypto.subtle.importKey(
+    'raw',utf8(master),{name:'PBKDF2'},false,['deriveBits']
+  );
+  // Derive 256 bits
+  const bits=await crypto.subtle.deriveBits(
+    {name:'PBKDF2',hash:'SHA-256',salt:utf8(`${site}:${counter}`),iterations:200000},
+    km,256
+  );
+  // Base64-encode, take first 20 chars, enforce complexity
+  return ensureComplexity(toB64(bits).slice(0,20));
+}
+
+// ── Generate handler ─────────────────────────────────────────────
+genBtn.addEventListener('click',async()=>{
+  errBan.textContent='';errBan.classList.remove('on');
+  cpySt.textContent='';
+  const master=masterInput.value;
+  const site=siteInput.value.trim();
+  const counter=parseInt(ctrInput.value,10);
+  if(!master){err('Master secret cannot be empty.');return;}
+  if(!site){err('Site name cannot be empty.');return;}
+  if(!Number.isInteger(counter)||counter<1){err('Counter must be a whole number ≥ 1.');return;}
+  genBtn.disabled=true;genBtn.textContent='Generating…';
+  try{
+    const pw=await derivePassword(master,site,counter);
+    pwOut.value=pw;
+    outSec.classList.add('on');
+    pwOut.focus();pwOut.select();
+  }catch(e){err('Derivation failed: '+(e.message||String(e)));}
+  finally{genBtn.disabled=false;genBtn.textContent='Generate Password';}
+});
+
+// Enter key on any input triggers generate
+[masterInput,siteInput,ctrInput].forEach(el=>
+  el.addEventListener('keydown',e=>{if(e.key==='Enter')genBtn.click();})
+);
+
+// ── Copy handler ──────────────────────────────────────────────────
+cpyBtn.addEventListener('click',async()=>{
+  if(!pwOut.value)return;
+  try{
+    await navigator.clipboard.writeText(pwOut.value);
+    cpySt.textContent='✓ Copied!';
+  }catch{
+    pwOut.select();document.execCommand('copy');
+    cpySt.textContent='✓ Copied (fallback)!';
+  }
+  setTimeout(()=>{cpySt.textContent='';},2000);
+});
+
+function err(msg){errBan.textContent='⚠ '+msg;errBan.classList.add('on');}
+</script>
+</body>
+</html>
